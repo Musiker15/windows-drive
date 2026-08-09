@@ -1,7 +1,7 @@
 # Building this fork
 
-The published source drop does not build as it stands. There are two independent gaps. The first
-one is worked around here, the second one is not fixed yet.
+The published source drop does not build as it stands. There are two independent gaps, both
+handled in this fork. Once the local feed is built, the whole solution compiles.
 
 ## Prerequisites
 
@@ -47,9 +47,9 @@ With that in place, everything under `sync\cs\src` builds:
 dotnet build sync\cs\src\Proton.Drive.Sdk.Sync.Agent\Proton.Drive.Sdk.Sync.Agent.csproj -c Release
 ```
 
-## Gap 2: a source folder is missing from the repository
+## Gap 2: a source folder was missing from the repository
 
-`Proton.Drive.Update` fails with 31 errors, all of them variations of
+Before it was restored, `Proton.Drive.Update` failed with 31 errors, all of them variations of
 
 ```
 error CS0234: The type or namespace name 'Releases' does not exist in the namespace 'Proton.Drive.Update'
@@ -71,19 +71,22 @@ repository. Verifiable with:
 git check-ignore -v src/Proton.Drive.Update/Releases/Release.cs
 ```
 
-Because `Proton.Drive.App.Windows` depends on `Proton.Drive.Update`, the application itself cannot
-be built until those types are restored. The sync stack does not depend on it and builds fine.
+The two types, `Release` and `CategoryReleases`, are reconstructed in this fork from the assembly
+bundled in the official client, so they match the shipping behaviour instead of being guesswork.
+`.gitignore` carries a negation for the folder now, otherwise the same rule would drop them again.
 
-## What builds today
+If upstream ever restores the folder, drop this fork's copies and the negation.
 
-| Project | State |
-| --- | --- |
-| `Proton.Drive.Shared` | builds |
-| `Proton.Drive.Sdk.Sync.Shared` | builds |
-| `Proton.Drive.Sdk.Sync.Adapter` | builds |
-| `Proton.Drive.Sdk.Sync.Engine` | builds |
-| `Proton.Drive.Sdk.Sync.DataAccess` | builds |
-| `Proton.Drive.Sdk.Sync.Client` | builds, needs the local feed |
-| `Proton.Drive.Sdk.Sync.Agent` | builds, needs the local feed |
-| `Proton.Drive.Update` | fails, see gap 2 |
-| `Proton.Drive.App`, `Proton.Drive.App.Windows` | fail, they depend on `Proton.Drive.Update` |
+## What builds
+
+Everything, once `build-localfeed.ps1` has run:
+
+```powershell
+dotnet build ProtonDrive.slnx -c Release
+```
+
+Twelve projects, no warnings. The application ends up in
+`src\Proton.Drive.App.Windows\bin\Release\net10.0-windows10.0.17763.0\win-x64\`.
+
+The WiX installer projects under `installer\` are marked `Build=false` in the solution and are not
+part of this.
