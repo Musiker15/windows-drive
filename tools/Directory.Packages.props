@@ -1,0 +1,10 @@
+<Project>
+  <!--
+    Stops MSBuild from walking further up, see Directory.Build.props next to this file. Without it
+    the helper projects inherit the repository's central package management and its global StyleCop
+    PackageReference, which then has no version and fails restore with NU1015.
+  -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+</Project>
