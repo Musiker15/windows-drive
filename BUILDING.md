@@ -1,7 +1,8 @@
 # Building this fork
 
-The published source drop does not build as it stands. There are two independent gaps, both
-handled in this fork. Once the local feed is built, the whole solution compiles.
+The published source drop does not build as it stands. There were two independent gaps. Upstream
+closed the second one in 3.0.4, the first is still open and is handled in this fork. Once the local
+feed is built, the whole solution compiles.
 
 ## Prerequisites
 
@@ -47,16 +48,19 @@ With that in place, everything under `sync\cs\src` builds:
 dotnet build sync\cs\src\Proton.Drive.Sdk.Sync.Agent\Proton.Drive.Sdk.Sync.Agent.csproj -c Release
 ```
 
-## Gap 2: a source folder was missing from the repository
+## Gap 2: a source folder was missing from the repository (fixed upstream in 3.0.4)
 
-Before it was restored, `Proton.Drive.Update` failed with 31 errors, all of them variations of
+Kept here as a record, since it explains what `tools\bundlex` was originally for and why the
+history of this fork contains reconstructed types. Nothing needs to be done about it any more.
+
+`Proton.Drive.Update` used to fail with 31 errors, all of them variations of
 
 ```
 error CS0234: The type or namespace name 'Releases' does not exist in the namespace 'Proton.Drive.Update'
 error CS0246: The type or namespace name 'Release' could not be found
 ```
 
-`src\Proton.Drive.Update\Releases\` is simply not in the repository. The cause is line 20 of the
+`src\Proton.Drive.Update\Releases\` was simply not in the repository. The cause was line 20 of the
 repository's own `.gitignore`:
 
 ```
@@ -64,18 +68,15 @@ repository's own `.gitignore`:
 ```
 
 That line comes from the standard `VisualStudio.gitignore` template, where it is meant to exclude
-build output. It also matches the source folder, so the folder never made it into the published
-repository. Verifiable with:
+build output. It also matched the source folder, so the folder never made it into the published
+repository. It had been reported in
+[PR #1](https://github.com/ProtonDriveApps/windows-drive/pull/1) since September 2024.
 
-```powershell
-git check-ignore -v src/Proton.Drive.Update/Releases/Release.cs
-```
-
-The two types, `Release` and `CategoryReleases`, are reconstructed in this fork from the assembly
-bundled in the official client, so they match the shipping behaviour instead of being guesswork.
-`.gitignore` carries a negation for the folder now, otherwise the same rule would drop them again.
-
-If upstream ever restores the folder, drop this fork's copies and the negation.
+Proton shipped the two files and a negation for the folder in
+[96432631](https://github.com/ProtonDriveApps/windows-drive/commit/96432631be72d0dbb04d77f77ae5d43c0bf50a39).
+This fork carried its own copies of `Release` and `CategoryReleases` until then, reconstructed from
+the assembly bundled in the official client. They have been dropped in favour of the real sources,
+which turned out to differ only in formatting, member order and one doc comment.
 
 ## What builds
 
