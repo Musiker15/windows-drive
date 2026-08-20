@@ -34,6 +34,23 @@ NuGet feed. With that in place the whole solution compiles.
 
 See [BUILDING.md](BUILDING.md) for the exact steps and the versions involved.
 
+### Building it yourself
+
+```powershell
+.\build.ps1
+```
+
+That is the whole procedure. The script finds the .NET 10 SDK, including a user scoped one under
+`%USERPROFILE%\.dotnet`, builds the local NuGet feed if it is missing, and publishes a self
+contained `artifacts\ProtonDrive.exe`. Prerequisites are the .NET 10 SDK and an installed official
+client of the same version, the script says so if either is missing.
+
+There is no download here, and there will not be one. Two of the assemblies the application needs
+are Proton's, they are published neither as source nor under a licence that would let anyone else
+pass them on, and they end up inside every build. On top of that a binary like this carries
+Proton's name and asks for Proton credentials while being signed by nobody. Building it yourself
+from sources you can read is the honest version of that, and it is one command.
+
 ### Contributions to this fork
 
 The "Contributions are not accepted at the moment" note further down is Proton's and refers to

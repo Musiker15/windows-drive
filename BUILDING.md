@@ -4,6 +4,18 @@ The published source drop does not build as it stands. There were two independen
 closed the second one in 3.0.4, the first is still open and is handled in this fork. Once the local
 feed is built, the whole solution compiles.
 
+## The short way
+
+`build.ps1` in the repository root does everything below in one step:
+
+```powershell
+.\build.ps1
+```
+
+It locates the SDK, builds the feed if needed and publishes to `artifacts\`. Useful switches:
+`-SkipFeed`, `-Runtime`, `-ProtonDriveDirectory`, `-OutputDirectory`. The rest of this document
+explains what it does and why any of it is necessary.
+
 ## Prerequisites
 
 .NET SDK 10.0 or newer. A user scoped install is enough:
