@@ -359,3 +359,7 @@ vcpkg_installed/
 
 # Output of build.ps1
 /artifacts/
+
+# Fixtures for the ignore rules, see PROTONIGNORE.md. They deliberately carry names
+# that the patterns above would drop, so they have to be re-included here.
+!/test-files/**

@@ -1,0 +1,12 @@
+# Test rules for the VM run
+
+# 1. Extension, applies at any depth
+*.log
+# 2. Exception to that
+!keep.log
+# 3. Directory only, applies at any depth
+node_modules/
+# 4. Anchored, applies directly on the sync root only
+/build
+# 5. Brings back what myrepo/.gitignore excludes
+!dist/
