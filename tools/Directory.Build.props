@@ -1,0 +1,6 @@
+<Project>
+  <!--
+    Stops MSBuild from walking further up. The helper projects below are build tooling, not part
+    of the product, and must not inherit the repository build settings.
+  -->
+</Project>

@@ -353,3 +353,6 @@ vcpkg_installed/
 
 # Include specific solution folders into source control that were ignored above
 !src/Proton.Drive.Update/Releases/
+
+# Repackaged Proton assemblies, see BUILDING.md. Reproducible via tools\localfeed.
+/localfeed/
