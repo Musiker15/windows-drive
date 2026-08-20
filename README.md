@@ -34,6 +34,13 @@ NuGet feed. With that in place the whole solution compiles.
 
 See [BUILDING.md](BUILDING.md) for the exact steps and the versions involved.
 
+### Contributions to this fork
+
+The "Contributions are not accepted at the moment" note further down is Proton's and refers to
+their repository. For this fork, issues and pull requests are welcome. The ignore rules are
+proposed upstream in [PR #2](https://github.com/ProtonDriveApps/windows-drive/pull/2), so anything
+that improves them may end up there.
+
 ---
 
 Copyright (c) 2026 Proton AG
