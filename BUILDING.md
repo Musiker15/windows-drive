@@ -44,9 +44,9 @@ The repository root `nuget.config` adds that folder as a package source, and
 
 | Package | Version |
 | --- | --- |
-| `Proton.Cryptography` | 0.28.0 |
-| `Proton.Sdk` | 0.17.0 |
-| `Proton.Drive.Sdk` | 0.17.0 |
+| `Proton.Cryptography` | 0.32.0-rust.2 |
+| `Proton.Sdk` | 0.26.0-rust |
+| `Proton.Drive.Sdk` | 0.26.0-rust |
 
 Install the client version that matches `<Version>` in `Directory.Build.props`, otherwise the
 assemblies will not line up with the source. The script warns when they differ.

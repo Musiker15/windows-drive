@@ -3,9 +3,9 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <PackageId>Proton.Drive.Sdk</PackageId>
-    <Version>0.17.0</Version>
+    <Version>0.26.0-rust</Version>
     <Authors>Proton AG</Authors>
-    <Description>Repackaged from the official Proton Drive Windows client 3.0.4 for local builds of the open source repository. Not an official Proton package.</Description>
+    <Description>Repackaged from the official Proton Drive Windows client 3.0.9 for local builds of the open source repository. Not an official Proton package.</Description>
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
@@ -18,11 +18,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.11" />
     <PackageReference Include="Microsoft.IO.RecyclableMemoryStream" Version="3.0.1" />
-    <PackageReference Include="Polly" Version="8.6.6" />
-    <PackageReference Include="Proton.Cryptography" Version="0.28.0" />
-    <PackageReference Include="Proton.Sdk" Version="0.17.0" />
-    <PackageReference Include="System.Numerics.Tensors" Version="10.0.5" />
+    <PackageReference Include="Polly" Version="8.7.0" />
+    <PackageReference Include="Proton.Sdk" Version="0.26.0-rust" />
+    <PackageReference Include="System.Numerics.Tensors" Version="10.0.10" />
   </ItemGroup>
 
 </Project>
