@@ -11,9 +11,11 @@
 Files and folders inside a sync root can be kept out of synchronization, the same way `.gitignore`
 keeps files out of a Git repository.
 
-* `.protonignore` on the root of a sync folder applies to that whole sync root.
+* `.protonignore` in any directory applies to that directory and everything below it, so a sync
+  root full of repositories can give each one its own rules.
 * `.gitignore` in any directory applies to that directory and everything below it, exactly where
   Git would apply it. On by default, can be turned off.
+* Every `.protonignore` outranks every `.gitignore`, and a deeper file outranks a shallower one.
 * Full gitignore pattern syntax: anchors, directory only patterns, negation, `*`, `?`, `**` and
   character classes.
 
