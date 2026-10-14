@@ -102,15 +102,24 @@ $env:PATH = "$(Split-Path $dotnet);$env:PATH"
 
 $feedDirectory = Join-Path $PSScriptRoot 'localfeed'
 
+# The feed is current when it holds every package at the version its project under tools\localfeed declares
+$expectedPackages = Get-ChildItem (Join-Path $PSScriptRoot 'tools\localfeed') -Filter *.csproj -Recurse |
+    ForEach-Object {
+        $group = ([xml](Get-Content $_.FullName)).Project.PropertyGroup
+        "$($group.PackageId).$($group.Version).nupkg"
+    }
+$missingPackages = @($expectedPackages | Where-Object { -not (Test-Path (Join-Path $feedDirectory $_)) })
+
 if ($SkipFeed) {
     Write-Step 'Skipping the local feed as requested'
 }
-elseif (Test-Path (Join-Path $feedDirectory '*.nupkg')) {
+elseif ($missingPackages.Count -eq 0) {
     Write-Step 'Local feed is already there, leaving it alone'
-    Write-Host 'Delete the localfeed folder to have it rebuilt, for example after a version bump.'
 }
 else {
     Write-Step 'Building the local feed from the installed client'
+    Write-Host "Missing: $($missingPackages -join ', ')"
+    Get-ChildItem $feedDirectory -Filter *.nupkg -ErrorAction SilentlyContinue | Remove-Item
     & (Join-Path $PSScriptRoot 'tools\localfeed\build-localfeed.ps1') -ProtonDriveDirectory $ProtonDriveDirectory
 }
 
