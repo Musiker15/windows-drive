@@ -198,12 +198,22 @@ internal abstract partial class SuccessStep<TId, TAltId>
 
         if (node.IsNodeOrBranchDeleted())
         {
-            _logger.LogDebug("{Replica} Adapter Tree {Type} node with Id={Id} is in already deleted branch", _replica, node.Type, node.Id);
+            _logger.LogDebug(
+                "{Replica} Adapter Tree {Type} node with Id={Id} at parent with Id={ParentId} is in already deleted branch",
+                _replica,
+                node.Type,
+                node.Id,
+                node.Model.ParentId);
 
             return;
         }
 
-        _logger.LogDebug("Marking {Replica} Adapter Tree {Type} node with Id={Id} as deleted", _replica, node.Type, node.Id);
+        _logger.LogDebug(
+            "Marking {Replica} Adapter Tree {Type} node with Id={Id} at parent with Id={ParentId} as deleted",
+            _replica,
+            node.Type,
+            node.Id,
+            node.Model.ParentId);
 
         // Directories deleted while in a dirty branch are marked with the DirtyDescendants flag.
         var dirtyStatus = node.Type == NodeType.Directory && BranchIsDirty(node)
@@ -215,7 +225,13 @@ internal abstract partial class SuccessStep<TId, TAltId>
 
     protected void RemoveAltId(AdapterTreeNode<TId, TAltId> node)
     {
-        _logger.LogDebug("Updating {Replica} Adapter Tree {Type} node with Id={Id} to remove AltId value={AltId}", _replica, node.Type, node.Id, node.AltId);
+        _logger.LogDebug(
+            "Updating {Replica} Adapter Tree {Type} node with Id={Id} at parent with Id={ParentId} to remove AltId value={AltId}",
+            _replica,
+            node.Type,
+            node.Id,
+            node.Model.ParentId,
+            node.AltId);
 
         var updatedNodeModel = IncomingAdapterTreeNodeModel<TId, TAltId>
             .FromNodeModel(node.Model)
@@ -227,10 +243,11 @@ internal abstract partial class SuccessStep<TId, TAltId>
     protected void AppendDirtyStatus(AdapterTreeNode<TId, TAltId> node, AdapterNodeStatus value)
     {
         _logger.LogInformation(
-            "Updating {Replica} Adapter Tree {Type} node with Id={Id} to append status flag(s) ({Flags})",
+            "Updating {Replica} Adapter Tree {Type} node with Id={Id} at parent with Id={ParentId} to append status flag(s) ({Flags})",
             _replica,
             node.Type,
             node.Id,
+            node.Model.ParentId,
             value);
 
         var incoming = IncomingAdapterTreeNodeModel<TId, TAltId>
@@ -242,7 +259,13 @@ internal abstract partial class SuccessStep<TId, TAltId>
 
     protected void SetStateUpdateFlags(AdapterTreeNode<TId, TAltId> node, AdapterNodeStatus value)
     {
-        _logger.LogDebug("Updating {Replica} Adapter Tree {Type} node with Id={Id} state update flag(s) to ({Value})", _replica, node.Type, node.Id, value);
+        _logger.LogDebug(
+            "Updating {Replica} Adapter Tree {Type} node with Id={Id} at parent with Id={ParentId} state update flag(s) to ({Value})",
+            _replica,
+            node.Type,
+            node.Id,
+            node.Model.ParentId,
+            value);
 
         var incoming = IncomingAdapterTreeNodeModel<TId, TAltId>
             .FromNodeModel(node.Model)
@@ -253,7 +276,13 @@ internal abstract partial class SuccessStep<TId, TAltId>
 
     protected void SetDirtyStatus(AdapterTreeNode<TId, TAltId> node, AdapterNodeStatus value)
     {
-        _logger.LogInformation("Updating {Replica} Adapter Tree {Type} node with Id={Id} to set status flag(s) ({Flags})", _replica, node.Type, node.Id, value);
+        _logger.LogInformation(
+            "Updating {Replica} Adapter Tree {Type} node with Id={Id} at parent with Id={ParentId} to set status flag(s) ({Flags})",
+            _replica,
+            node.Type,
+            node.Id,
+            node.Model.ParentId,
+            value);
 
         var incoming = IncomingAdapterTreeNodeModel<TId, TAltId>
             .FromNodeModel(node.Model)
@@ -391,11 +420,12 @@ internal abstract partial class SuccessStep<TId, TAltId>
 
         // New file system object appeared with the reused ID
         _logger.LogWarning(
-            "{Replica} Adapter Tree {Type} node with Id={Id} {AltId} doesn't match the expected, marking it as deleted",
+            "{Replica} Adapter Tree {Type} node with Id={Id} {AltId} at parent with Id={ParentId} doesn't match the expected, marking it as deleted",
             _replica,
             node.Type,
             node.Id,
-            node.AltId);
+            node.AltId,
+            node.Model.ParentId);
 
         MarkAsDeleted(node);
         RemoveAltId(node);

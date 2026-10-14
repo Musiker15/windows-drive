@@ -26,7 +26,6 @@ using Proton.Drive.Sdk.Sync.Shared.Trees.Changes;
 using Proton.Drive.Sdk.Sync.Shared.Trees.Operations;
 using Proton.Drive.Shared;
 using Proton.Drive.Shared.Configuration;
-using Proton.Drive.Shared.Extensions;
 using Proton.Drive.Shared.Features;
 using Proton.Drive.Shared.Reporting;
 using Proton.Drive.Shared.Repository;
@@ -50,7 +49,7 @@ public sealed class GenericAdapter<TId, TAltId> : ISyncAdapter<TId>, IManagedAda
     private readonly DirtyNodes<TId, TAltId> _dirtyNodes;
     private readonly SyncActivity<TId> _syncActivity;
     private readonly IOperationExecutor<TId> _operationExecution;
-    private readonly UpdateDetection<TId, TAltId> _updateDetection;
+    private readonly IUpdateDetector _updateDetection;
     private readonly DetectedTreeChanges<TId> _detectedUpdates;
     private readonly ReceivedTreeChanges<TId>? _syncedUpdates;
     private readonly SyncedStateHandler<TId, TAltId>? _syncedStateHandler;
@@ -85,6 +84,7 @@ public sealed class GenericAdapter<TId, TAltId> : ISyncAdapter<TId>, IManagedAda
         TimeSpan maxFileAccessRetryInterval,
         TimeSpan maxFileRevisionCreationInterval,
         TimeSpan minDelayBeforeFileUpload,
+        TimeSpan syncDelayInterval,
         IFileSystemClient<TAltId> fileSystemClient,
         IEventLogClient<TAltId> eventLogClient,
         IClock clock,
@@ -335,10 +335,25 @@ public sealed class GenericAdapter<TId, TAltId> : ISyncAdapter<TId>, IManagedAda
             updateDetectionSequencer,
             twoPassUpdateDetectionSwitch);
 
-        _updateDetection = new UpdateDetection<TId, TAltId>(
+        var updateDetection = new UpdateDetection<TId, TAltId>(
             stateBasedUpdateDetection,
             logBasedUpdateDetection,
             twoPassUpdateDetectionSwitch);
+
+        _updateDetection = replica switch
+        {
+            Replica.Local => new BulkDeletionDetectingUpdateDetectorDecorator(
+                updateDetection,
+                new BulkDeletionDetector(),
+                syncDelayInterval,
+                featureFlagProvider,
+                clock,
+                loggerFactory.CreateLogger<BulkDeletionDetectingUpdateDetectorDecorator>()),
+
+            Replica.Remote => updateDetection,
+
+            _ => throw new ArgumentOutOfRangeException(nameof(replica), replica, null),
+        };
 
         if (stateMaintenanceTreeRepository != null)
         {
@@ -361,6 +376,7 @@ public sealed class GenericAdapter<TId, TAltId> : ISyncAdapter<TId>, IManagedAda
 
             _fileSyncStateHandler = new FileSyncStateHandler<TId, TAltId>(
                 loggerFactory.CreateLogger<FileSyncStateHandler<TId, TAltId>>(),
+                replica,
                 appConfig,
                 scheduler,
                 executionScheduler,
@@ -375,13 +391,15 @@ public sealed class GenericAdapter<TId, TAltId> : ISyncAdapter<TId>, IManagedAda
                     FileSystemTree));
         }
 
+        var copySourceRevisionProvider = new CopySourceRevisionProvider<TId, TAltId>(
+            loggerFactory.CreateLogger<CopySourceRevisionProvider<TId, TAltId>>(),
+            SyncScheduler,
+            copiedNodes,
+            _externalFileRevisionProvider,
+            _mappedNodeIdProvider);
+
         _fileRevisionProvider =
             new FallbackFileRevisionProviderDecorator<TId, TAltId>(
-                loggerFactory.CreateLogger<FallbackFileRevisionProviderDecorator<TId, TAltId>>(),
-                SyncScheduler,
-                copiedNodes,
-                _externalFileRevisionProvider,
-                _mappedNodeIdProvider,
                 new FileRevisionProvider<TId, TAltId>(
                     SyncScheduler,
                     FileSystemTree,
@@ -391,7 +409,8 @@ public sealed class GenericAdapter<TId, TAltId> : ISyncAdapter<TId>, IManagedAda
                         loggerFactory.CreateLogger<EnumerationFailureStep<TId, TAltId>>(),
                         FileSystemTree),
                     minDelayBeforeFileUpload,
-                    loggerFactory.CreateLogger<FileRevisionProvider<TId, TAltId>>()));
+                    loggerFactory.CreateLogger<FileRevisionProvider<TId, TAltId>>()),
+                copySourceRevisionProvider);
 
         var fileSizeCorrector = new FileSizeCorrectionPipeline<TId, TAltId>(
             loggerFactory.CreateLogger<FileSizeCorrectionPipeline<TId, TAltId>>(),
@@ -410,6 +429,7 @@ public sealed class GenericAdapter<TId, TAltId> : ISyncAdapter<TId>, IManagedAda
             FileSystemTree,
             _externalFileRevisionProvider,
             _mappedNodeIdProvider,
+            copySourceRevisionProvider,
             fileSizeCorrector,
             _syncActivity);
     }
@@ -517,25 +537,6 @@ public sealed class GenericAdapter<TId, TAltId> : ISyncAdapter<TId>, IManagedAda
     public void Dispose()
     {
         _fileSyncStateHandler?.Dispose();
-    }
-
-    public Task<bool> TryMarkNodeAsDirtyAsync(TId id, CancellationToken cancellationToken)
-    {
-        return SyncScheduler.Schedule(
-            () =>
-            {
-                var node = FileSystemTree.NodeByIdOrDefault(id);
-                if (node is null)
-                {
-                    return false;
-                }
-
-                var newNode = node.Model.Copy().WithStatus(node.Model.Status | AdapterNodeStatus.DirtyAttributes);
-                FileSystemTree.Operations.Execute(new Operation<AdapterTreeNodeModel<TId, TAltId>>(OperationType.Update, newNode));
-
-                return true;
-            },
-            cancellationToken);
     }
 
     public Task<LooseCompoundAltIdentity<TAltId>?> GetNodeAltIdByIdOrDefaultAsync(TId id, CancellationToken cancellationToken)
