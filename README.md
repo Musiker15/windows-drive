@@ -6,6 +6,9 @@
 
 ## What this fork adds
 
+### Supported Version
+* v3.1.0
+
 ### Ignore rules
 
 Files and folders inside a sync root can be kept out of synchronization, the same way `.gitignore`
