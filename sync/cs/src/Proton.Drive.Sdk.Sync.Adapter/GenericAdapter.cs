@@ -466,6 +466,7 @@ public sealed class GenericAdapter<TId, TAltId> : ISyncAdapter<TId>, IManagedAda
         _dirtyNodes.Initialize();
         _detectedUpdates.Initialize();
 
+        _syncedUpdates?.Initialize();
         _syncedUpdates?.ConnectTo(syncedStateProvider);
     }
 
@@ -479,6 +480,11 @@ public sealed class GenericAdapter<TId, TAltId> : ISyncAdapter<TId>, IManagedAda
     public Task<ISourceRevision> OpenFileForReadingAsync(TId id, long version, CancellationToken cancellationToken)
     {
         return _fileRevisionProvider.OpenFileForReadingAsync(id, version, cancellationToken);
+    }
+
+    public Task<ISourceRevision> GetMetadataOnlyRevisionAsync(TId id, long version, CancellationToken cancellationToken)
+    {
+        return _fileRevisionProvider.GetMetadataOnlyRevisionAsync(id, version, cancellationToken);
     }
 
     public async Task ConnectAsync(CancellationToken cancellationToken)
@@ -576,6 +582,10 @@ public sealed class GenericAdapter<TId, TAltId> : ISyncAdapter<TId>, IManagedAda
 
         public Task<ISourceRevision> OpenFileForReadingAsync(TId id, long version, CancellationToken cancellationToken)
             => _origin?.OpenFileForReadingAsync(id, version, cancellationToken)
+               ?? throw new InvalidOperationException($"Origin not set using {nameof(SetOrigin)}");
+
+        public Task<ISourceRevision> GetMetadataOnlyRevisionAsync(TId id, long version, CancellationToken cancellationToken)
+            => _origin?.GetMetadataOnlyRevisionAsync(id, version, cancellationToken)
                ?? throw new InvalidOperationException($"Origin not set using {nameof(SetOrigin)}");
     }
 
