@@ -4,10 +4,9 @@
 > It adds user defined ignore rules to the sync engine, plus the tooling needed to build the
 > published sources. Proton's original README starts at [License](#license) below.
 
-## What this fork adds
+**Supported Version:** v3.1.0
 
-### Supported Version
-* v3.1.0
+## What this fork adds
 
 ### Ignore rules
 
