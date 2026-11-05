@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Console check for the ReFS classic sync prototype. It runs the real classes of
+    Proton.Drive.Sdk.Sync.Windows against a folder on an NTFS or ReFS volume. The assembly name
+    matches the InternalsVisibleTo entry of that project, so the internal EventLogClient is reachable.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows10.0.17763.0</TargetFramework>
+    <AssemblyName>Proton.Drive.Sdk.Sync.Windows.Tests</AssemblyName>
+    <RootNamespace>PrototypeCheck</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\sync\cs\src\Proton.Drive.Sdk.Sync.Windows\Proton.Drive.Sdk.Sync.Windows.csproj" />
+  </ItemGroup>
+
+</Project>
