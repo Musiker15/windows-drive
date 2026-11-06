@@ -135,6 +135,7 @@ Step("move b.txt into D", () => { File.Move(Path.Combine(root, "b.txt"), Path.Co
 Step("rename directory D to E", () => { Directory.Move(Path.Combine(root, "D"), Path.Combine(root, "E")); Remember("E"); Remember(Path.Combine("E", "b.txt")); });
 Step("create c.txt", () => { File.WriteAllText(Path.Combine(root, "c.txt"), "3"); Remember("c.txt"); });
 Step("delete E\\b.txt", () => File.Delete(Path.Combine(root, "E", "b.txt")));
+var replacedId = knownIds["c.txt"].Single();
 Step("replace c.txt (safe save)", () =>
 {
     File.WriteAllText(Path.Combine(root, "c.tmp"), "4");
@@ -147,6 +148,16 @@ Step("create and delete quickly", () =>
     var path = Path.Combine(root, "short-lived.txt");
     File.WriteAllText(path, "5");
     File.Delete(path);
+});
+Step("delete and re-create quickly under the same name", () =>
+{
+    var path = Path.Combine(root, "same-name.txt");
+    File.WriteAllText(path, "6");
+    Remember("same-name.txt");
+    Thread.Sleep(1500);
+    File.Delete(path);
+    File.WriteAllText(path, "7");
+    Remember("same-name.txt");
 });
 
 Thread.Sleep(1000);
@@ -220,12 +231,23 @@ Check(
     received.Any(e => e.ChangeType == EventLogChangeType.Moved && e.Id == knownIds["D"].Single() && string.Equals(e.Path, "E", StringComparison.OrdinalIgnoreCase)),
     "Directory rename D -> E is reported as move of the same ID");
 
-var deletionReported = isNtfs
-    ? received.Any(e => e.ChangeType == EventLogChangeType.DeletedOrMovedFrom && e.Id == fileId)
-    : received.Any(e => e.ChangeType == EventLogChangeType.Skipped);
-Check(deletionReported, isNtfs
-    ? "NTFS: deletion of b.txt is reported with its ID"
-    : "ReFS: deletion is reported as skipped entries (sync root gets re-enumerated)");
+Check(
+    received.Any(e => e.ChangeType == EventLogChangeType.DeletedOrMovedFrom && e.Id == fileId),
+    "Deletion of b.txt is reported with its ID");
+Check(
+    received.Any(e => e.ChangeType == EventLogChangeType.DeletedOrMovedFrom && e.Id == replacedId),
+    "Safe save reports the replaced c.txt as removed with its ID");
+
+// No object that still exists may be reported as deleted
+var aliveIds = Directory.EnumerateFileSystemEntries(root, "*", SearchOption.AllDirectories).Select(p => GetIds(p).Id).ToHashSet();
+var aliveReportedDeleted = received.Where(e => e.ChangeType == EventLogChangeType.DeletedOrMovedFrom && aliveIds.Contains(e.Id)).ToList();
+foreach (var e in aliveReportedDeleted)
+{
+    Info($"  existing object reported as deleted: {e.Path} 0x{e.Id:X16}");
+}
+
+Check(aliveReportedDeleted.Count == 0, $"No existing object is reported as deleted ({aliveReportedDeleted.Count} found)");
+Info($"Skipped entries: {received.Count(e => e.ChangeType == EventLogChangeType.Skipped)}");
 
 Info($"Done: {failures} failure(s)");
 return failures;

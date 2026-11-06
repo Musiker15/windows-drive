@@ -32,6 +32,9 @@ public partial class FileSystemExtendedWatcher
             return;
         }
 
+        // IDs remembered for basic notifications are stale after a restart
+        ForgetKnownObjects();
+
         var path = PathInternal.EnsureExtendedPrefixIfNeeded(_directory);
         // Create handle to directory being monitored
         _directoryHandle = Kernel32.CreateFile(
@@ -257,6 +260,7 @@ public partial class FileSystemExtendedWatcher
 
             if (numBytes == 0)
             {
+                ForgetKnownObjects();
                 NotifyInternalBufferOverflowEvent();
             }
             else
