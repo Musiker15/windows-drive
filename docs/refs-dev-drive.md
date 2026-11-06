@@ -1,7 +1,8 @@
 # ReFS and Dev Drive for classic sync (prototype)
 
 Status: prototype on branch `prototype/refs-classic-sync`, tested end to end with a test account in a
-Windows 11 VM (06.11.2026). One open behaviour difference: safe save loses the version history.
+Windows 11 VM (06.11.2026). The safe save difference found there is fixed in the watcher
+(`0412d5b`); the client check of the version history is still open.
 
 The client refuses folders on ReFS, which includes Windows Dev Drive, with "Unsupported drive type".
 This prototype accepts ReFS for classic sync folders (backed up folders under "My computer").
@@ -74,8 +75,12 @@ created, so a future ReFS version with a different scheme is refused instead of 
   time, which is true at that moment. Whatever cannot be looked up is reported as `Skipped`.
 - **Root deletion is no longer detected from events** on ReFS (that detector needs deletion events with
   IDs). It falls back to the re-enumeration. Behaviour when a whole sync folder is deleted needs testing.
-- **Safe save loses the version history** on ReFS (old file to the trash, new file uploaded), while
-  NTFS keeps it as a new version. See the VM test below.
+- **Safe save lost the version history** on ReFS (old file to the trash, new file uploaded), while
+  NTFS keeps it as a new version. Fixed in `0412d5b`, see the VM test below; the end-to-end check with
+  the client is still open.
+- **Remembered IDs can be stale.** Deletions and old names are reported with the last ID seen for the
+  path. A deletion is only attributed when that object is no longer at the path; the counter-check
+  without this guard reported an existing file as deleted (1 of 3 runs, timing dependent).
 - **Opening objects races with other applications on ReFS.** The first version of the lookup broke
   `ReplaceFile`. The lookup no longer opens objects, but the engine itself still opens files (upload,
   identity checks); that is the same as on NTFS and was not seen to fail.
@@ -167,8 +172,19 @@ steps, client stopped and restarted by the script), checked on the web client:
 trash. On ReFS the old file went to the trash and the new one was uploaded as a new file. No content is
 lost, but the history is. Cause: the basic notifications carry no ID for the removed intermediate file,
 so the fallback reports `Skipped`, and the re-enumeration sees "old ID gone, new ID at the path".
-Possible fix: remember the last looked-up ID per path in the watcher and report deletions and old
-names as `DeletedOrMovedFrom` with that ID, as the extended notifications do on NTFS.
+**Fix (`0412d5b`, `59e3c4b`):** the watcher remembers the last looked-up ID per path and reports
+deletions, old names and moves out of the tree with it, as the extended notifications do on NTFS. A
+deletion is only attributed when the remembered object is no longer at that path. Prototype check on
+`T:`, 3 runs each:
+
+| Variant | Failures | `Skipped` entries |
+| --- | --- | --- |
+| Fixed | 0, 0, 0 | 0, 0, 1 |
+| Without remembered IDs | 2, 2, 2 (deletion without ID, safe save) | 6 |
+| Without the "object still there" guard | 1, 0, 0 (existing file reported as deleted) | 0 |
+
+The replaced file of a safe save is now reported as removed with its ID, as on NTFS. Not yet
+checked: that the client then keeps the version history.
 
 Not tested: deleting the whole backed-up folder, the on-demand toggle on the Dev Drive folder.
 
