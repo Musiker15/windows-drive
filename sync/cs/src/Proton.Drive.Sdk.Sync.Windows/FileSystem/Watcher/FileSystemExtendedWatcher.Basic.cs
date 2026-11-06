@@ -1,5 +1,4 @@
 using System.Threading;
-using Microsoft.Win32.SafeHandles;
 using Proton.Drive.Sdk.Sync.Windows.FileSystem.Integration;
 using Proton.Drive.Sdk.Sync.Windows.Interop;
 
@@ -27,6 +26,13 @@ namespace Proton.Drive.Sdk.Sync.Windows.FileSystem.Watcher;
 public partial class FileSystemExtendedWatcher
 {
     private const int ErrorInvalidFunction = 1;
+
+    private static readonly EnumerationOptions LookUpEnumerationOptions = new()
+    {
+        AttributesToSkip = default,
+        ReturnSpecialDirectories = false,
+        BufferSize = 1024,
+    };
 
     private volatile bool _useBasicNotifications;
 
@@ -143,8 +149,14 @@ public partial class FileSystemExtendedWatcher
 
     /// <summary>
     /// Reads the metadata and IDs of the object at the given path relative to the watched directory.
-    /// Returns default (ID 0) when the object cannot be opened or has no usable ID.
+    /// Returns default (ID 0) when the object cannot be found or has no usable ID.
     /// </summary>
+    /// <remarks>
+    /// The object itself is never opened. Opening it, even for reading attributes only, races with
+    /// multi-step operations of other applications: on ReFS, <c>ReplaceFile</c> ("safe save" of many
+    /// editors) then fails with <c>ERROR_UNABLE_TO_REMOVE_REPLACED</c>. The parent directory is queried
+    /// for the single entry instead, the same way directory enumeration reports IDs to the sync engine.
+    /// </remarks>
     private FileExtendedInfo LookUpFileExtendedInfo(ReadOnlySpan<char> relativePath)
     {
         try
@@ -152,64 +164,46 @@ public partial class FileSystemExtendedWatcher
             // Path is a property of the watcher, hence the fully qualified name
             var fullPath = System.IO.Path.Join(_directory, relativePath);
             var parentPath = System.IO.Path.GetDirectoryName(fullPath);
+            var name = System.IO.Path.GetFileName(fullPath);
 
-            if (string.IsNullOrEmpty(parentPath))
+            if (string.IsNullOrEmpty(parentPath) || string.IsNullOrEmpty(name))
             {
                 return default;
             }
 
-            using var handle = OpenForReadingAttributes(fullPath);
-            var information = Internal.FileSystem.GetFileInformation(handle);
-            var fileId = ToFileId(information);
+            using var parentDirectory = FileSystemDirectory.Open(
+                parentPath,
+                FileSystemFileAccess.ReadData,
+                FileShare.ReadWrite | FileShare.Delete);
 
-            var reparseTag = (information.dwFileAttributes & FileAttributes.ReparsePoint) != 0
-                ? Internal.FileSystem.GetFileAttributeTagInfo(handle).ReparseTag
-                : 0;
+            var entry = parentDirectory.EnumerateFileSystemEntries(name, LookUpEnumerationOptions, ownsHandle: false).SingleOrDefault();
+            var parentFileId = parentDirectory.ObjectId;
 
-            using var parentHandle = OpenForReadingAttributes(parentPath);
-            var parentFileId = ToFileId(Internal.FileSystem.GetFileInformation(parentHandle));
-
-            if (fileId is 0 or ReFsFileId.InvalidFileId || parentFileId is 0 or ReFsFileId.InvalidFileId)
+            if (entry is null
+                || entry.ObjectId is 0 or ReFsFileId.InvalidFileId
+                || parentFileId is 0 or ReFsFileId.InvalidFileId)
             {
                 return default;
             }
 
-            var isDirectory = (information.dwFileAttributes & FileAttributes.Directory) != 0;
+            var isDirectory = (entry.Attributes & FileAttributes.Directory) != 0;
 
             return new FileExtendedInfo
             {
-                CreationTimeUtc = information.ftCreationTime.ToDateTimeUtc(),
-                LastModificationTimeUtc = information.ftLastWriteTime.ToDateTimeUtc(),
-                LastChangeTimeUtc = information.ftLastWriteTime.ToDateTimeUtc(),
-                LastAccessTimeUtc = information.ftLastAccessTime.ToDateTimeUtc(),
-                FileSize = isDirectory ? 0 : unchecked((long)(((ulong)information.nFileSizeHigh << 32) | information.nFileSizeLow)),
-                Attributes = information.dwFileAttributes,
-                FileId = fileId,
+                CreationTimeUtc = entry.CreationTimeUtc,
+                LastModificationTimeUtc = entry.LastWriteTimeUtc,
+                LastChangeTimeUtc = entry.LastWriteTimeUtc,
+                FileSize = isDirectory ? 0 : entry.Size,
+                Attributes = entry.Attributes,
+                FileId = entry.ObjectId,
                 ParentFileId = parentFileId,
-                ReparseTag = reparseTag,
+                ReparseTag = entry.ReparseTag,
             };
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
         {
-            // The object is gone, renamed again or not accessible. Report it without ID.
+            // The object or its parent is gone, renamed again or not accessible. Report it without ID.
             return default;
         }
-    }
-
-    private static SafeFileHandle OpenForReadingAttributes(string path)
-    {
-        // The reparse point itself is opened, not its target, the same as directory enumeration reports it
-        return Internal.FileSystem.CreateHandle(
-            path,
-            FileMode.Open,
-            FileSystemFileAccess.ReadAttributes,
-            FileShare.ReadWrite | FileShare.Delete,
-            attributes: default,
-            (FileOptions)(Kernel32.FileFlags.FILE_FLAG_BACKUP_SEMANTICS | Kernel32.FileFlags.FILE_FLAG_OPEN_REPARSE_POINT));
-    }
-
-    private static long ToFileId(Kernel32.BY_HANDLE_FILE_INFORMATION information)
-    {
-        return unchecked((long)(((ulong)information.nFileIndexHigh << 32) | information.nFileIndexLow));
     }
 }

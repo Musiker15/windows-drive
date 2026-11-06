@@ -1,5 +1,7 @@
 // Checks the ReFS classic sync prototype with the real classes of Proton.Drive.Sdk.Sync.Windows.
-// Usage: PrototypeCheck <folder on ReFS or NTFS>
+// Usage: PrototypeCheck <folder on ReFS or NTFS> [--no-watcher]
+// --no-watcher runs the file operations without the event log client, to separate effects of the
+// watcher from effects of the environment (antivirus, other filters).
 // Exit code is the number of failed checks.
 
 using Microsoft.Extensions.Logging.Abstractions;
@@ -24,11 +26,13 @@ void Check(bool condition, string description)
 
 void Info(string text) => Console.WriteLine("INFO  " + text);
 
-if (args.Length != 1)
+if (args.Length is < 1 or > 2 || (args.Length == 2 && args[1] != "--no-watcher"))
 {
-    Console.Error.WriteLine("Usage: PrototypeCheck <folder>");
+    Console.Error.WriteLine("Usage: PrototypeCheck <folder> [--no-watcher]");
     return 2;
 }
+
+var useWatcher = args.Length == 1;
 
 var baseFolder = Path.GetFullPath(args[0]);
 var root = Path.Combine(baseFolder, "prototype-check-" + DateTime.Now.ToString("yyyyMMdd-HHmmss"));
@@ -78,7 +82,15 @@ client.LogEntriesReceived += (_, e) =>
     }
 };
 
-client.Enable(new RootDirectory(rootIds.Id, root));
+if (useWatcher)
+{
+    client.Enable(new RootDirectory(rootIds.Id, root));
+}
+else
+{
+    Info("Event log client not enabled (--no-watcher)");
+}
+
 Thread.Sleep(500);
 lock (entries)
 {
@@ -101,9 +113,17 @@ void Remember(string relativePath)
 
 void Step(string description, Action action)
 {
-    action();
+    try
+    {
+        action();
+        Info("Step: " + description);
+    }
+    catch (Exception ex)
+    {
+        Check(false, $"Step '{description}' threw {ex.GetType().Name} 0x{ex.HResult:X8}: {ex.Message}");
+    }
+
     Thread.Sleep(400);
-    Info("Step: " + description);
 }
 
 Step("create a.txt", () => { File.WriteAllText(Path.Combine(root, "a.txt"), "1"); Remember("a.txt"); });
@@ -131,6 +151,12 @@ Step("create and delete quickly", () =>
 
 Thread.Sleep(1000);
 client.Disable();
+
+if (!useWatcher)
+{
+    Info($"Done: {failures} failure(s)");
+    return failures;
+}
 
 List<EventLogEntry<long>> received;
 lock (entries)
