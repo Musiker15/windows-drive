@@ -159,6 +159,16 @@ Step("delete and re-create quickly under the same name", () =>
     File.WriteAllText(path, "7");
     Remember("same-name.txt");
 });
+Step("create, delete and re-create without pause", () =>
+{
+    // All three changes reach the watcher in one batch, the lookups only see the second object
+    var path = Path.Combine(root, "same-name-fast.txt");
+    File.WriteAllText(path, "8");
+    Remember("same-name-fast.txt");
+    File.Delete(path);
+    File.WriteAllText(path, "9");
+    Remember("same-name-fast.txt");
+});
 
 Thread.Sleep(1000);
 client.Disable();
