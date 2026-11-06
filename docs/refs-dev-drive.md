@@ -1,6 +1,7 @@
 # ReFS and Dev Drive for classic sync (prototype)
 
-Status: prototype on branch `prototype/refs-classic-sync`, not tested end to end with an account yet.
+Status: prototype on branch `prototype/refs-classic-sync`, tested end to end with a test account in a
+Windows 11 VM (06.11.2026). One open behaviour difference: safe save loses the version history.
 
 The client refuses folders on ReFS, which includes Windows Dev Drive, with "Unsupported drive type".
 This prototype accepts ReFS for classic sync folders (backed up folders under "My computer").
@@ -56,7 +57,7 @@ The undocumented packing is the main risk. The prototype therefore does not trus
 | `IsClassicSyncSupportedFileSystem`: NTFS, or ReFS when the folder's 64-bit ID unpacks exactly into its 128-bit ID | `VolumeInfoProvider`, `ReFsFileId` |
 | Folder validation and client creation use it for classic sync, on-demand keeps `IsNtfsFileSystem` | `LocalSyncFolderValidator`, `LocalFolderValidationStep`, `SyncFolderService`, `LocalDecoratedFileSystemClientFactory` |
 | Objects with 64-bit ID `0xFFFFFFFFFFFFFFFF` are rejected instead of synced | `FileSystemExtensions.ToNodeInfo` |
-| Watcher falls back to basic notifications on `ERROR_INVALID_FUNCTION` and looks up IDs by path | `FileSystemExtendedWatcher.Basic.cs` |
+| Watcher falls back to basic notifications on `ERROR_INVALID_FUNCTION` and looks up IDs by querying the parent directory (never opening the object) | `FileSystemExtendedWatcher.Basic.cs` |
 | Events without a resolvable ID (deletion, old name of a move) become `Skipped`, which makes the adapter re-enumerate the sync root | `EventLogClient` |
 
 The self-check runs whenever a classic folder is validated and whenever its file system client is
@@ -73,6 +74,11 @@ created, so a future ReFS version with a different scheme is refused instead of 
   time, which is true at that moment. Whatever cannot be looked up is reported as `Skipped`.
 - **Root deletion is no longer detected from events** on ReFS (that detector needs deletion events with
   IDs). It falls back to the re-enumeration. Behaviour when a whole sync folder is deleted needs testing.
+- **Safe save loses the version history** on ReFS (old file to the trash, new file uploaded), while
+  NTFS keeps it as a new version. See the VM test below.
+- **Opening objects races with other applications on ReFS.** The first version of the lookup broke
+  `ReplaceFile`. The lookup no longer opens objects, but the engine itself still opens files (upload,
+  identity checks); that is the same as on NTFS and was not seen to fail.
 - **Objects with ID `0xFFFFFFFFFFFFFFFF`** abort the enumeration of their directory, so the whole
   directory fails to sync. Not reached in the stress test.
 - Not covered: symbolic links and junctions inside the sync folder, hard links, very large trees,
@@ -122,20 +128,53 @@ Counter-checks, each with a fault built in on purpose:
 | Parent ID taken from the object itself | 1 failure, 23 wrong parent IDs |
 | No fallback to basic notifications | 4 failures |
 
-### 3. Client with a test account (open)
+### 3. Windows 11 VM (done, 06.11.2026)
 
-Not possible in the VM `Win10-Work`: Dev Drive needs Windows 11 22H2 or newer, and Windows 10 cannot
-mount a ReFS 3.14 volume. Needs a Windows 11 machine or VM and someone signed in with a test account.
+VM `Win11-Work`, Windows 11 Pro build 26300, Dev Drive `T:` (ReFS 3.14, trusted, only `WdFilter`
+attached). `Win10-Work` could not be used: Dev Drive needs Windows 11, and Windows 10 cannot mount
+ReFS 3.14.
 
-1. Build with `.\build.ps1 -SkipFeed`, start the client from `artifacts\`, sign in with a test account.
-2. Add a folder on the Dev Drive under "My computer". Expected: accepted, no "Unsupported drive type".
-3. Try the same Dev Drive folder as account root (on-demand). Expected: rejected.
-4. In the backed-up folder, each followed by a check on the web client:
-   create a file and a folder, edit a file, rename a file, rename a folder, move a file into another
-   folder, move a folder with content, delete a file, delete a folder, safe save from an editor.
-5. Stop the client, rename and move files while it is off, start it again. Expected: renames and moves
-   arrive as such in the cloud, not as delete plus upload.
-6. Delete the whole backed-up folder. Expected: the client reports the missing folder, nothing is deleted
-   in the cloud without the usual handling.
-7. Watch the log for `Event log entries were skipped` after deletions and for the
-   `ReFS file ID scheme ... is supported` line.
+**Prototype check in the guest found a real bug.** With the watcher running, `ReplaceFile` (safe save)
+failed with `ERROR_UNABLE_TO_REMOVE_REPLACED` (`0x80070497`):
+
+| Variant | Safe save failed |
+| --- | --- |
+| Watcher with ID lookup by opening the object | 5 of 5 runs |
+| Without watcher (`--no-watcher`) | 0 of 3 |
+| Watcher, lookup disabled | 0 of 2 |
+| Watcher, lookup without opening the parent | 2 of 2 |
+| Static handles or a tight open/close loop, no watcher | 0 of 80 |
+
+Only an open that coincides with the steps inside `ReplaceFile` triggers it. Fixed in `e1727ca`: the
+lookup queries the parent directory for the single entry and never opens the object. Afterwards 5 of 5
+runs passed with all 22 checks.
+
+**Client with the test account**, scripted scenario in `T:\ProtonSicherung\Lauf2` (30 s between
+steps, client stopped and restarted by the script), checked on the web client:
+
+| Step | Result |
+| --- | --- |
+| Add the Dev Drive folder under "My computer" | accepted, log `ReFS file ID scheme ... is supported` |
+| Create folder and file, edit, rename file, rename folder | arrived live, `Ordner1` -> `Ordner2` kept its node |
+| Delete a file (`b.txt`) | in the trash after the re-enumeration (`Skipped`) |
+| Move a folder with content, then delete it (`Ordner3`) | in the trash, detected after the restart |
+| Safe save (`ReplaceFile`) of `c.txt` | old file in the trash, new file uploaded (see below) |
+| Client stopped: rename `c.txt` -> `d.txt`, move into `Ordner2`, create `e.txt` | after the restart: `d.txt` keeps upload time 10:44 (moved, not uploaded again), no second `c.txt` in the trash, `e.txt` uploaded |
+| Log | no invalid ID, no `IdentityMismatch`, no rejected file system |
+
+**Difference to NTFS: safe save loses the version history on ReFS.** Control in the NTFS folder
+"Documents" of the same client: `ReplaceFile` produced a second version of the same file, nothing in the
+trash. On ReFS the old file went to the trash and the new one was uploaded as a new file. No content is
+lost, but the history is. Cause: the basic notifications carry no ID for the removed intermediate file,
+so the fallback reports `Skipped`, and the re-enumeration sees "old ID gone, new ID at the path".
+Possible fix: remember the last looked-up ID per path in the watcher and report deletions and old
+names as `DeletedOrMovedFrom` with that ID, as the extended notifications do on NTFS.
+
+Not tested: deleting the whole backed-up folder, the on-demand toggle on the Dev Drive folder.
+
+**Unrelated finding (on-demand, NTFS):** after every client start, setup hung for about ten minutes.
+The ignore rule provider reads `.protonignore` of the test folder `ignore-test-3.1.0` inside the
+on-demand root on `C:`. The file is a dehydrated placeholder, so reading it triggers hydration through
+the client itself, which fails with `Destination is too short (Parameter 'destination')` and is
+requested again about once a minute. This concerns the ignore rules (ProtonDriveApps/windows-drive#2),
+not ReFS.
