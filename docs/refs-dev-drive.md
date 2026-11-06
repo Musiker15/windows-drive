@@ -1,8 +1,8 @@
 # ReFS and Dev Drive for classic sync (prototype)
 
 Status: prototype on branch `prototype/refs-classic-sync`, tested end to end with a test account in a
-Windows 11 VM (06.11.2026). The safe save difference found there is fixed in the watcher
-(`0412d5b`); the client check of the version history is still open.
+Windows 11 VM (06.11.2026). The safe save difference found there is fixed (`0412d5b`) and confirmed
+with the client: a safe save on the Dev Drive now creates a new version, as on NTFS.
 
 The client refuses folders on ReFS, which includes Windows Dev Drive, with "Unsupported drive type".
 This prototype accepts ReFS for classic sync folders (backed up folders under "My computer").
@@ -76,8 +76,8 @@ created, so a future ReFS version with a different scheme is refused instead of 
 - **Root deletion is no longer detected from events** on ReFS (that detector needs deletion events with
   IDs). It falls back to the re-enumeration. Behaviour when a whole sync folder is deleted needs testing.
 - **Safe save lost the version history** on ReFS (old file to the trash, new file uploaded), while
-  NTFS keeps it as a new version. Fixed in `0412d5b`, see the VM test below; the end-to-end check with
-  the client is still open.
+  NTFS keeps it as a new version. Fixed in `0412d5b` and confirmed with the client, see the VM test
+  below.
 - **Remembered IDs can be stale.** Deletions and old names are reported with the last ID seen for the
   path. A deletion is only attributed when that object is no longer at the path; the counter-check
   without this guard reported an existing file as deleted (1 of 3 runs, timing dependent).
@@ -183,8 +183,10 @@ deletion is only attributed when the remembered object is no longer at that path
 | Without remembered IDs | 2, 2, 2 (deletion without ID, safe save) | 6 |
 | Without the "object still there" guard | 1, 0, 0 (existing file reported as deleted) | 0 |
 
-The replaced file of a safe save is now reported as removed with its ID, as on NTFS. Not yet
-checked: that the client then keeps the version history.
+The replaced file of a safe save is now reported as removed with its ID, as on NTFS. Confirmed with
+the client built from `0412d5b`: `T:\ProtonSicherung\Lauf3.txt` uploaded as version 1, then saved
+with `ReplaceFile`; the web client shows two versions of the same file (11:36, 11:40) and nothing in
+the trash.
 
 Not tested: deleting the whole backed-up folder, the on-demand toggle on the Dev Drive folder.
 
