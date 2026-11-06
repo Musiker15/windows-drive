@@ -56,6 +56,7 @@ The undocumented packing is the main risk. The prototype therefore does not trus
 | Change | Where |
 | --- | --- |
 | `IsClassicSyncSupportedFileSystem`: NTFS, or ReFS when the folder's 64-bit ID unpacks exactly into its 128-bit ID | `VolumeInfoProvider`, `ReFsFileId` |
+| "Optimize storage" (switch a backed-up folder to on-demand) is refused on non-NTFS volumes with `VolumeNotSupported` | `OnDemandSyncEligibilityValidator` |
 | Folder validation and client creation use it for classic sync, on-demand keeps `IsNtfsFileSystem` | `LocalSyncFolderValidator`, `LocalFolderValidationStep`, `SyncFolderService`, `LocalDecoratedFileSystemClientFactory` |
 | Objects with 64-bit ID `0xFFFFFFFFFFFFFFFF` are rejected instead of synced | `FileSystemExtensions.ToNodeInfo` |
 | Watcher falls back to basic notifications on `ERROR_INVALID_FUNCTION` and looks up IDs by querying the parent directory (never opening the object) | `FileSystemExtendedWatcher.Basic.cs` |
@@ -188,7 +189,19 @@ the client built from `0412d5b`: `T:\ProtonSicherung\Lauf3\v.txt` uploaded as ve
 with `ReplaceFile`; the web client shows two versions of the same file (11:36, 11:40) and nothing in
 the trash.
 
-Not tested: deleting the whole backed-up folder, the on-demand toggle on the Dev Drive folder.
+**Optimize storage on the Dev Drive folder.** Before `OnDemandSyncEligibilityValidator` checked the file
+system, the client tried to register an on-demand sync root on the Dev Drive, which Windows refused
+(`Failed to register on-demand sync root`); the user saw an unspecific error. Now it is refused before
+that: log `not eligible for on-demand sync: VolumeNotSupported`, dialog "local drive type is not
+supported". In both cases the folder stays in classic sync.
+
+**Deleting the backed-up folder.**
+
+| Case | Result |
+| --- | --- |
+| Client running: move or delete the folder itself | refused, the watcher holds it open without delete sharing (same as NTFS) |
+| Client stopped: folder renamed away, client started | `LocalFolderDoesNotExist`, "sync folder not found" in the UI, nothing deleted in the cloud, trash unchanged |
+| Folder renamed back, client started | mapping set up again, ReFS check passes, folder identity check passes (the ReFS ID survives the rename) |
 
 **Unrelated finding (on-demand, NTFS):** after every client start, setup hung for about ten minutes.
 The ignore rule provider reads `.protonignore` of the test folder `ignore-test-3.1.0` inside the
