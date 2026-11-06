@@ -184,7 +184,7 @@ deletion is only attributed when the remembered object is no longer at that path
 | Without the "object still there" guard | 1, 0, 0 (existing file reported as deleted) | 0 |
 
 The replaced file of a safe save is now reported as removed with its ID, as on NTFS. Confirmed with
-the client built from `0412d5b`: `T:\ProtonSicherung\Lauf3.txt` uploaded as version 1, then saved
+the client built from `0412d5b`: `T:\ProtonSicherung\Lauf3\v.txt` uploaded as version 1, then saved
 with `ReplaceFile`; the web client shows two versions of the same file (11:36, 11:40) and nothing in
 the trash.
 
