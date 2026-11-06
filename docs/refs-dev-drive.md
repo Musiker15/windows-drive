@@ -1,7 +1,7 @@
 # ReFS and Dev Drive for classic sync (prototype)
 
 Status: prototype on branch `prototype/refs-classic-sync`, tested end to end with a test account in a
-Windows 11 VM (06.11.2026). The safe save difference found there is fixed (`0412d5b`) and confirmed
+Windows 11 VM (06.11.2026). The safe save difference found there is fixed (`bf26038`) and confirmed
 with the client: a safe save on the Dev Drive now creates a new version, as on NTFS.
 
 The client refuses folders on ReFS, which includes Windows Dev Drive, with "Unsupported drive type".
@@ -75,9 +75,10 @@ created, so a future ReFS version with a different scheme is refused instead of 
 - **ID lookup by path is delayed.** It only reports an ID together with the path the object has at lookup
   time, which is true at that moment. Whatever cannot be looked up is reported as `Skipped`.
 - **Root deletion is no longer detected from events** on ReFS (that detector needs deletion events with
-  IDs). It falls back to the re-enumeration. Behaviour when a whole sync folder is deleted needs testing.
+  IDs). It falls back to the re-enumeration. Deleting the whole backed-up folder was tested with the
+  client, see the VM test below.
 - **Safe save lost the version history** on ReFS (old file to the trash, new file uploaded), while
-  NTFS keeps it as a new version. Fixed in `0412d5b` and confirmed with the client, see the VM test
+  NTFS keeps it as a new version. Fixed in `bf26038` and confirmed with the client, see the VM test
   below.
 - **Remembered IDs can be stale.** Deletions and old names are reported with the last ID seen for the
   path. A deletion is only attributed when that object is no longer at the path; the counter-check
@@ -87,8 +88,8 @@ created, so a future ReFS version with a different scheme is refused instead of 
   identity checks); that is the same as on NTFS and was not seen to fail.
 - **Objects with ID `0xFFFFFFFFFFFFFFFF`** abort the enumeration of their directory, so the whole
   directory fails to sync. Not reached in the stress test.
-- Not covered: symbolic links and junctions inside the sync folder, hard links, very large trees,
-  long-running behaviour, and the full client with an account.
+- Not covered: symbolic links and junctions inside the sync folder, hard links, very large trees and
+  long-running behaviour.
 
 ## Test protocol
 
@@ -151,7 +152,7 @@ failed with `ERROR_UNABLE_TO_REMOVE_REPLACED` (`0x80070497`):
 | Watcher, lookup without opening the parent | 2 of 2 |
 | Static handles or a tight open/close loop, no watcher | 0 of 80 |
 
-Only an open that coincides with the steps inside `ReplaceFile` triggers it. Fixed in `e1727ca`: the
+Only an open that coincides with the steps inside `ReplaceFile` triggers it. Fixed in `dbf2d82`: the
 lookup queries the parent directory for the single entry and never opens the object. Afterwards 5 of 5
 runs passed with all 22 checks.
 
@@ -173,7 +174,7 @@ steps, client stopped and restarted by the script), checked on the web client:
 trash. On ReFS the old file went to the trash and the new one was uploaded as a new file. No content is
 lost, but the history is. Cause: the basic notifications carry no ID for the removed intermediate file,
 so the fallback reports `Skipped`, and the re-enumeration sees "old ID gone, new ID at the path".
-**Fix (`0412d5b`, `59e3c4b`):** the watcher remembers the last looked-up ID per path and reports
+**Fix (`bf26038`, `9fc2f30`):** the watcher remembers the last looked-up ID per path and reports
 deletions, old names and moves out of the tree with it, as the extended notifications do on NTFS. A
 deletion is only attributed when the remembered object is no longer at that path. Prototype check on
 `T:`, 3 runs each:
@@ -185,7 +186,7 @@ deletion is only attributed when the remembered object is no longer at that path
 | Without the "object still there" guard | 1, 0, 0 (existing file reported as deleted) | 0 |
 
 The replaced file of a safe save is now reported as removed with its ID, as on NTFS. Confirmed with
-the client built from `0412d5b`: `T:\ProtonSicherung\Lauf3\v.txt` uploaded as version 1, then saved
+the client built from `bf26038`: `T:\ProtonSicherung\Lauf3\v.txt` uploaded as version 1, then saved
 with `ReplaceFile`; the web client shows two versions of the same file (11:36, 11:40) and nothing in
 the trash.
 
@@ -208,4 +209,5 @@ The ignore rule provider reads `.protonignore` of the test folder `ignore-test-3
 on-demand root on `C:`. The file is a dehydrated placeholder, so reading it triggers hydration through
 the client itself, which fails with `Destination is too short (Parameter 'destination')` and is
 requested again about once a minute. This concerns the ignore rules (ProtonDriveApps/windows-drive#2),
-not ReFS.
+not ReFS. Fixed in `d6e2c79` on `main`, which this branch is based on: ignore files whose content is
+not on disk are skipped and read once they are hydrated.
